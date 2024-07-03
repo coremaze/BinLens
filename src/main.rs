@@ -1,6 +1,13 @@
 use std::{fmt::Display, fs, path::PathBuf};
 
-use iced::Application;
+use iced::{
+    advanced::{graphics::core::event, mouse, Widget},
+    widget::{responsive, scrollable::Direction, Scrollable},
+    window, Application, Event, Subscription,
+};
+mod preview;
+use preview::{Pixel, Preview};
+use rayon::iter::{IntoParallelRefIterator, ParallelBridge, ParallelIterator};
 
 struct FileInfo {
     data: Vec<u8>,
@@ -8,27 +15,66 @@ struct FileInfo {
 }
 struct ImageViewApp {
     pixel_mode: PixelMode,
-    image_width: u32,
     file: Option<FileInfo>,
+    preview: Preview,
 }
 #[derive(Debug, Clone)]
 enum AppMessage {
     PixelModeSelected(PixelMode),
     ImageWidthSelected(u32),
     OpenFileDialog,
+    ImageScroll(u32),
+    ImageScale(f32),
+    WindowResize { width: u32, height: u32 },
 }
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 enum PixelMode {
     RGB,
+    BGR,
 }
 impl PixelMode {
-    pub const ALL: &'static [Self] = &[Self::RGB];
+    pub const ALL: &'static [Self] = &[Self::RGB, Self::BGR];
 }
 impl Display for PixelMode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(match self {
             PixelMode::RGB => "rgb",
+            PixelMode::BGR => "bgr",
         })
+    }
+}
+
+impl ImageViewApp {
+    pub fn update_pixel_decoding(&mut self) {
+        match &self.file {
+            Some(file) => {
+                let pixels = match self.pixel_mode {
+                    PixelMode::RGB => file
+                        .data
+                        .chunks_exact(3)
+                        .map(|data| Pixel {
+                            red: data[0],
+                            green: data[1],
+                            blue: data[2],
+                        })
+                        .collect::<Vec<Pixel>>(),
+                    PixelMode::BGR => file
+                        .data
+                        .chunks_exact(3)
+                        .map(|data| Pixel {
+                            blue: data[0],
+                            green: data[1],
+                            red: data[2],
+                        })
+                        .collect::<Vec<Pixel>>(),
+                };
+
+                self.preview.set_pixels(pixels);
+            }
+            None => {
+                self.preview.clear();
+            }
+        }
     }
 }
 
@@ -42,8 +88,8 @@ impl iced::Application for ImageViewApp {
         (
             Self {
                 pixel_mode: PixelMode::RGB,
-                image_width: 256,
                 file: None,
+                preview: Preview::default(),
             },
             iced::Command::none(),
         )
@@ -60,13 +106,38 @@ impl iced::Application for ImageViewApp {
         // dbg!("Got message {:?}", &message);
 
         match message {
-            AppMessage::PixelModeSelected(pixel_mode) => self.pixel_mode = pixel_mode,
-            AppMessage::ImageWidthSelected(image_width) => self.image_width = image_width,
+            AppMessage::PixelModeSelected(pixel_mode) => {
+                self.pixel_mode = pixel_mode;
+                self.update_pixel_decoding();
+                self.preview.update_image();
+            }
+            AppMessage::ImageWidthSelected(image_width) => {
+                self.preview.set_width(image_width);
+                self.preview.update_image();
+            }
             AppMessage::OpenFileDialog => {
                 let file_info = get_file();
                 if file_info.is_some() {
                     self.file = file_info;
                 }
+                self.update_pixel_decoding();
+                self.preview.update_image();
+            }
+            AppMessage::ImageScroll(scroll) => {
+                println!("scroll {scroll}");
+                if let Some(file) = &self.file {
+                    self.preview.set_starting_line(scroll);
+                    self.preview.update_image();
+                }
+            }
+            AppMessage::WindowResize { width, height } => {
+                self.preview.set_frame_height(height);
+                self.preview.set_frame_width(width);
+                self.preview.update_image();
+            }
+            AppMessage::ImageScale(scale) => {
+                self.preview.set_scale(scale);
+                self.preview.update_image();
             }
         }
 
@@ -84,6 +155,23 @@ impl iced::Application for ImageViewApp {
         let controls = controls(self);
         row![preview, vertical_rule(2), controls].into()
     }
+
+    fn subscription(&self) -> Subscription<AppMessage> {
+        iced::event::listen_with(|event, _| match event {
+            Event::Window(_, window_event) => {
+                let new_size: Option<(u32, u32)> = match window_event {
+                    window::Event::Opened { position: _, size } => {
+                        Some((size.width as u32, size.height as u32))
+                    }
+                    window::Event::Resized { width, height } => Some((width, height)),
+                    _ => None,
+                };
+
+                new_size.map(|(width, height)| AppMessage::WindowResize { width, height })
+            }
+            _ => None,
+        })
+    }
 }
 
 fn get_file() -> Option<FileInfo> {
@@ -99,76 +187,61 @@ fn get_file() -> Option<FileInfo> {
 }
 
 fn preview(app: &ImageViewApp) -> iced::Element<AppMessage> {
+    use iced::ContentFit;
     use iced::Length;
+    use iced::Padding;
 
     use iced::widget::{
         button, canvas, column, container, horizontal_rule, image::Handle, pick_list, row,
-        scrollable, slider, text, vertical_rule,
+        scrollable, text, vertical_rule, vertical_slider, Canvas,
     };
 
-    let width = app.image_width;
-
-    let image = match &app.file {
-        Some(file) => {
-            let width = app.image_width;
-            let height = (file.data.len() / width as usize) as u32;
-
-            let mut pixel_data = vec![0u8; width as usize * height as usize * 4];
-
-            for (dst, src) in pixel_data
-                .chunks_exact_mut(4)
-                .zip(file.data.chunks_exact(4))
-            {
-                dst[0] = src[0];
-                dst[1] = src[1];
-                dst[2] = src[2];
-                dst[3] = 0xFF;
-            }
-
-            iced::widget::Image::<Handle>::new(Handle::from_pixels(width, height, pixel_data))
-        }
-        None => {
-            let mut pixels = vec![0u8; 1024 * 1024 * 4];
-            for (i, e) in pixels.chunks_exact_mut(4).enumerate() {
-                let y = i / 1024;
-                let x = i % 1024;
-
-                let r = (y / 4) as u8;
-                let g = (x / 4) as u8;
-                let b = r.saturating_add(g) / 2;
-
-                e[0] = r;
-                e[1] = g;
-                e[2] = b;
-                e[3] = 255;
-            }
-
-            iced::widget::Image::<Handle>::new(Handle::from_pixels(1024, 1024, pixels))
-        }
-    };
+    let scrollbar = vertical_slider(
+        0u32..=app.preview.lines(),
+        app.preview.starting_line(),
+        AppMessage::ImageScroll,
+    );
 
     let dir = scrollable::Direction::Both {
-        vertical: scrollable::Properties::default(),
-        horizontal: scrollable::Properties::default(),
+        vertical: scrollable::Properties::new()
+            .margin(0)
+            .scroller_width(0)
+            .width(0),
+        horizontal: scrollable::Properties::new()
+            .margin(0)
+            .scroller_width(0)
+            .width(0),
     };
 
-    let preview = container(
-        scrollable(image)
+    // canvas()
+
+    row!(
+        // scrollable(container(iced::widget::Image::new(
+        //     app.preview.image_handle()
+        // )))
+        scrollable(app.preview.clone())
             .direction(dir)
             .width(Length::Fill)
             .height(Length::Fill),
+        container(scrollbar).padding(Padding {
+            top: 0.,
+            right: 0.,
+            bottom: 0.,
+            left: 10.,
+        })
     )
-    .padding(10);
-
-    preview.into()
+    .padding(10)
+    .width(Length::Fill)
+    .height(Length::Fill)
+    .into()
 }
 
 fn controls(app: &ImageViewApp) -> iced::Element<AppMessage> {
-    use iced::Length;
+    use iced::{border::Radius, Border, Color, Length};
 
     use iced::widget::{
         button, canvas, column, container, horizontal_rule, image::Handle, pick_list, row,
-        scrollable, slider, text, vertical_rule,
+        scrollable, scrollable::Scrollbar, scrollable::Scroller, slider, text, vertical_rule,
     };
 
     let controls = container(
@@ -182,13 +255,21 @@ fn controls(app: &ImageViewApp) -> iced::Element<AppMessage> {
             .width(Length::Fill),
             horizontal_rule(1),
             column!(
-                text(format!("Image width: {}", app.image_width)),
-                slider(0..=512, app.image_width, AppMessage::ImageWidthSelected)
+                text(format!("Image width: {}", app.preview.width())),
+                slider(
+                    1..=1024,
+                    app.preview.width(),
+                    AppMessage::ImageWidthSelected
+                )
+            ),
+            column!(
+                text(format!("Scale: {}x", app.preview.scale())),
+                slider(1.0..=10.0, app.preview.scale(), AppMessage::ImageScale)
             ),
             horizontal_rule(1),
             text("Controls"),
             text("Controls!"),
-            text("Controls!!")
+            text("Controls!!"),
         )
         .width(200)
         .height(Length::Fill)
