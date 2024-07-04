@@ -24,22 +24,25 @@ enum AppMessage {
     ImageWidthSelected(u32),
     OpenFileDialog,
     ImageScroll(u32),
-    ImageScale(f32),
+    ImageScale(u32),
+    ByteOffset(u32),
     WindowResize { width: u32, height: u32 },
 }
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 enum PixelMode {
     RGB,
     BGR,
+    BPP8,
 }
 impl PixelMode {
-    pub const ALL: &'static [Self] = &[Self::RGB, Self::BGR];
+    pub const ALL: &'static [Self] = &[Self::RGB, Self::BGR, Self::BPP8];
 }
 impl Display for PixelMode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(match self {
             PixelMode::RGB => "rgb",
             PixelMode::BGR => "bgr",
+            PixelMode::BPP8 => "8bpp",
         })
     }
 }
@@ -65,6 +68,15 @@ impl ImageViewApp {
                             blue: data[0],
                             green: data[1],
                             red: data[2],
+                        })
+                        .collect::<Vec<Pixel>>(),
+                    PixelMode::BPP8 => file
+                        .data
+                        .iter()
+                        .map(|&data| Pixel {
+                            red: data,
+                            green: data,
+                            blue: data,
                         })
                         .collect::<Vec<Pixel>>(),
                 };
@@ -137,6 +149,10 @@ impl iced::Application for ImageViewApp {
             }
             AppMessage::ImageScale(scale) => {
                 self.preview.set_scale(scale);
+                self.preview.update_image();
+            }
+            AppMessage::ByteOffset(offset) => {
+                self.preview.set_byte_offset(offset);
                 self.preview.update_image();
             }
         }
@@ -219,8 +235,8 @@ fn preview(app: &ImageViewApp) -> iced::Element<AppMessage> {
         // scrollable(container(iced::widget::Image::new(
         //     app.preview.image_handle()
         // )))
-        scrollable(app.preview.clone())
-            .direction(dir)
+        container(row!(app.preview.clone()))
+            // .direction(dir)
             .width(Length::Fill)
             .height(Length::Fill),
         container(scrollbar).padding(Padding {
@@ -256,15 +272,19 @@ fn controls(app: &ImageViewApp) -> iced::Element<AppMessage> {
             horizontal_rule(1),
             column!(
                 text(format!("Image width: {}", app.preview.width())),
-                slider(
-                    1..=1024,
-                    app.preview.width(),
-                    AppMessage::ImageWidthSelected
-                )
+                slider(1..=256, app.preview.width(), AppMessage::ImageWidthSelected)
             ),
             column!(
                 text(format!("Scale: {}x", app.preview.scale())),
-                slider(1.0..=10.0, app.preview.scale(), AppMessage::ImageScale)
+                slider(1..=10, app.preview.scale(), AppMessage::ImageScale)
+            ),
+            column!(
+                text(format!("Byte offset: {}", app.preview.byte_offset())),
+                slider(
+                    0..=app.preview.width(),
+                    app.preview.byte_offset(),
+                    AppMessage::ByteOffset
+                )
             ),
             horizontal_rule(1),
             text("Controls"),

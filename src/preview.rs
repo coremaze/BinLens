@@ -6,18 +6,20 @@ use iced::{
     },
     Element, Length, Rectangle, Renderer, Size, Theme, Transformation,
 };
+use rayon::iter::{IntoParallelIterator, ParallelBridge, ParallelIterator};
 
 use std::hash::Hash;
 
 #[derive(Clone)]
 pub struct Preview {
-    pixels: Vec<u8>,
+    pixels: Vec<Pixel>,
     width: u32,
+    byte_offset: u32,
     starting_row: u32,
     frame_height: u32,
     frame_width: u32,
     image_handle: Handle,
-    scale: f32,
+    scale: u32,
 }
 
 impl Default for Preview {
@@ -25,23 +27,32 @@ impl Default for Preview {
         let handle = Handle::from_pixels(0, 0, []);
 
         Self {
-            pixels: Vec::<u8>::new(),
+            pixels: Vec::<Pixel>::new(),
             width: 0,
             frame_height: 0,
             frame_width: 0,
             image_handle: handle,
             starting_row: 0,
-            scale: 1.,
+            scale: 1,
+            byte_offset: 0,
         }
     }
 }
 
 impl Preview {
-    pub fn scale(&self) -> f32 {
+    pub fn set_byte_offset(&mut self, offset: u32) {
+        self.byte_offset = offset;
+    }
+
+    pub fn byte_offset(&self) -> u32 {
+        self.byte_offset
+    }
+
+    pub fn scale(&self) -> u32 {
         self.scale
     }
 
-    pub fn set_scale(&mut self, scale: f32) {
+    pub fn set_scale(&mut self, scale: u32) {
         self.scale = scale;
     }
 
@@ -84,10 +95,7 @@ impl Preview {
     }
 
     pub fn set_pixels(&mut self, pixels: Vec<Pixel>) {
-        self.pixels = pixels
-            .iter()
-            .flat_map(|pixel| [pixel.red, pixel.green, pixel.blue, 0xFF])
-            .collect();
+        self.pixels = pixels;
     }
 
     pub fn image_handle(&self) -> Handle {
@@ -95,25 +103,41 @@ impl Preview {
     }
 
     pub fn update_image(&mut self) {
-        let bytes_needed = self.width as usize * self.frame_height as usize * 4;
-        let byte_offset = self.starting_row as usize * self.width as usize * 4;
+        let byte_offset =
+            self.byte_offset as usize + self.starting_row as usize * self.width as usize * 4;
 
-        let pixel_data_beginnning = match self.pixels.get(byte_offset..) {
+        let pixels_at_offset = match self.pixels.get(byte_offset..) {
             Some(data) => data,
             None => &self.pixels,
         };
 
-        let pixel_data = match pixel_data_beginnning.get(..bytes_needed) {
-            Some(data) => data,
-            None => pixel_data_beginnning,
-        };
+        let mut pixel_data = Vec::<u8>::new();
 
-        let pixels_got = pixel_data.len() / 4;
-        let image_height = self
-            .frame_height
-            .min((pixels_got as u32).checked_div(self.width).unwrap_or(0));
+        for y in 0..self.frame_height {
+            let row = {
+                let mut row_data = Vec::<u8>::new();
+                for x in 0..self.width {
+                    let pixel_rgba = match pixels_at_offset.get((y * self.width + x) as usize) {
+                        Some(pixel) => [pixel.red, pixel.green, pixel.blue, 0xFF],
+                        None => [0, 0, 0, 0],
+                    };
 
-        let handle = Handle::from_pixels(self.width, image_height, pixel_data.to_owned());
+                    for _ in 0..self.scale {
+                        row_data.extend(pixel_rgba);
+                    }
+                }
+                row_data
+            };
+            for _ in 0..self.scale {
+                pixel_data.extend(&row);
+            }
+        }
+
+        let handle = Handle::from_pixels(
+            self.width * self.scale,
+            self.frame_height * self.scale,
+            pixel_data.to_owned(),
+        );
 
         self.image_handle = handle;
     }
