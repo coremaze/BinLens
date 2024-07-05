@@ -9,6 +9,8 @@ mod preview;
 use preview::{Pixel, Preview};
 use rayon::iter::{IntoParallelRefIterator, ParallelBridge, ParallelIterator};
 
+mod shader;
+
 struct FileInfo {
     data: Vec<u8>,
     path: PathBuf,
@@ -121,11 +123,9 @@ impl iced::Application for ImageViewApp {
             AppMessage::PixelModeSelected(pixel_mode) => {
                 self.pixel_mode = pixel_mode;
                 self.update_pixel_decoding();
-                self.preview.update_image();
             }
             AppMessage::ImageWidthSelected(image_width) => {
-                self.preview.set_width(image_width);
-                self.preview.update_image();
+                self.preview.set_target_width(image_width);
             }
             AppMessage::OpenFileDialog => {
                 let file_info = get_file();
@@ -133,27 +133,22 @@ impl iced::Application for ImageViewApp {
                     self.file = file_info;
                 }
                 self.update_pixel_decoding();
-                self.preview.update_image();
             }
             AppMessage::ImageScroll(scroll) => {
                 println!("scroll {scroll}");
                 if let Some(file) = &self.file {
                     self.preview.set_starting_line(scroll);
-                    self.preview.update_image();
                 }
             }
             AppMessage::WindowResize { width, height } => {
                 self.preview.set_frame_height(height);
                 self.preview.set_frame_width(width);
-                self.preview.update_image();
             }
             AppMessage::ImageScale(scale) => {
                 self.preview.set_scale(scale);
-                self.preview.update_image();
             }
             AppMessage::ByteOffset(offset) => {
                 self.preview.set_byte_offset(offset);
-                self.preview.update_image();
             }
         }
 
@@ -212,11 +207,11 @@ fn preview(app: &ImageViewApp) -> iced::Element<AppMessage> {
         scrollable, text, vertical_rule, vertical_slider, Canvas,
     };
 
-    let scrollbar = vertical_slider(
-        0u32..=app.preview.lines(),
-        app.preview.starting_line(),
-        AppMessage::ImageScroll,
-    );
+    // let scrollbar = vertical_slider(
+    //     0u32..=app.preview.lines(),
+    //     app.preview.starting_line(),
+    //     AppMessage::ImageScroll,
+    // );
 
     let dir = scrollable::Direction::Both {
         vertical: scrollable::Properties::new()
@@ -235,16 +230,19 @@ fn preview(app: &ImageViewApp) -> iced::Element<AppMessage> {
         // scrollable(container(iced::widget::Image::new(
         //     app.preview.image_handle()
         // )))
-        container(row!(app.preview.clone()))
-            // .direction(dir)
-            .width(Length::Fill)
-            .height(Length::Fill),
-        container(scrollbar).padding(Padding {
-            top: 0.,
-            right: 0.,
-            bottom: 0.,
-            left: 10.,
-        })
+        // container(row!(app.preview.clone()))
+        //     // .direction(dir)
+        container(
+            iced::widget::shader(&app.preview.program)
+                .width(Length::Fill)
+                .height(Length::Fill)
+        ),
+        // container(scrollbar).padding(Padding {
+        //     top: 0.,
+        //     right: 0.,
+        //     bottom: 0.,
+        //     left: 10.,
+        // })
     )
     .padding(10)
     .width(Length::Fill)
@@ -271,8 +269,12 @@ fn controls(app: &ImageViewApp) -> iced::Element<AppMessage> {
             .width(Length::Fill),
             horizontal_rule(1),
             column!(
-                text(format!("Image width: {}", app.preview.width())),
-                slider(1..=256, app.preview.width(), AppMessage::ImageWidthSelected)
+                text(format!("Image width: {}", app.preview.target_width())),
+                slider(
+                    1..=2048,
+                    app.preview.target_width(),
+                    AppMessage::ImageWidthSelected
+                )
             ),
             column!(
                 text(format!("Scale: {}x", app.preview.scale())),
@@ -281,7 +283,7 @@ fn controls(app: &ImageViewApp) -> iced::Element<AppMessage> {
             column!(
                 text(format!("Byte offset: {}", app.preview.byte_offset())),
                 slider(
-                    0..=app.preview.width(),
+                    0..=app.preview.target_width(),
                     app.preview.byte_offset(),
                     AppMessage::ByteOffset
                 )

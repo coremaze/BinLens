@@ -8,18 +8,18 @@ use iced::{
 };
 use rayon::iter::{IntoParallelIterator, ParallelBridge, ParallelIterator};
 
+use super::shader::FragmentShaderProgram;
 use std::hash::Hash;
 
-#[derive(Clone)]
+// #[derive(Clone)]
 pub struct Preview {
     pixels: Vec<Pixel>,
-    width: u32,
     byte_offset: u32,
     starting_row: u32,
     frame_height: u32,
     frame_width: u32,
     image_handle: Handle,
-    scale: u32,
+    pub program: FragmentShaderProgram,
 }
 
 impl Default for Preview {
@@ -28,13 +28,12 @@ impl Default for Preview {
 
         Self {
             pixels: Vec::<Pixel>::new(),
-            width: 0,
             frame_height: 0,
             frame_width: 0,
             image_handle: handle,
             starting_row: 0,
-            scale: 1,
             byte_offset: 0,
+            program: FragmentShaderProgram::new(),
         }
     }
 }
@@ -49,19 +48,19 @@ impl Preview {
     }
 
     pub fn scale(&self) -> u32 {
-        self.scale
+        self.program.scale()
     }
 
     pub fn set_scale(&mut self, scale: u32) {
-        self.scale = scale;
+        self.program.set_scale(scale)
     }
 
-    pub fn set_width(&mut self, width: u32) {
-        self.width = width;
+    pub fn set_target_width(&mut self, width: u32) {
+        self.program.set_target_width(width)
     }
 
-    pub fn width(&self) -> u32 {
-        self.width
+    pub fn target_width(&self) -> u32 {
+        self.program.target_width()
     }
 
     pub fn set_frame_height(&mut self, frame_height: u32) {
@@ -80,11 +79,11 @@ impl Preview {
         self.frame_width
     }
 
-    pub fn lines(&self) -> u32 {
-        (self.pixels.len() / 4)
-            .checked_div(self.width as usize)
-            .unwrap_or(0) as u32
-    }
+    // pub fn lines(&self) -> u32 {
+    //     (self.pixels.len() / 4)
+    //         .checked_div(self.width as usize)
+    //         .unwrap_or(0) as u32
+    // }
 
     pub fn set_starting_line(&mut self, line: u32) {
         self.starting_row = line;
@@ -102,45 +101,45 @@ impl Preview {
         self.image_handle.clone()
     }
 
-    pub fn update_image(&mut self) {
-        let byte_offset =
-            self.byte_offset as usize + self.starting_row as usize * self.width as usize * 4;
+    // pub fn update_image(&mut self) {
+    //     let byte_offset =
+    //         self.byte_offset as usize + self.starting_row as usize * self.width as usize * 4;
 
-        let pixels_at_offset = match self.pixels.get(byte_offset..) {
-            Some(data) => data,
-            None => &self.pixels,
-        };
+    //     let pixels_at_offset = match self.pixels.get(byte_offset..) {
+    //         Some(data) => data,
+    //         None => &self.pixels,
+    //     };
 
-        let mut pixel_data = Vec::<u8>::new();
+    //     let mut pixel_data = Vec::<u8>::new();
 
-        for y in 0..self.frame_height {
-            let row = {
-                let mut row_data = Vec::<u8>::new();
-                for x in 0..self.width {
-                    let pixel_rgba = match pixels_at_offset.get((y * self.width + x) as usize) {
-                        Some(pixel) => [pixel.red, pixel.green, pixel.blue, 0xFF],
-                        None => [0, 0, 0, 0],
-                    };
+    //     for y in 0..self.frame_height {
+    //         let row = {
+    //             let mut row_data = Vec::<u8>::new();
+    //             for x in 0..self.width {
+    //                 let pixel_rgba = match pixels_at_offset.get((y * self.width + x) as usize) {
+    //                     Some(pixel) => [pixel.red, pixel.green, pixel.blue, 0xFF],
+    //                     None => [0, 0, 0, 0],
+    //                 };
 
-                    for _ in 0..self.scale {
-                        row_data.extend(pixel_rgba);
-                    }
-                }
-                row_data
-            };
-            for _ in 0..self.scale {
-                pixel_data.extend(&row);
-            }
-        }
+    //                 for _ in 0..self.scale {
+    //                     row_data.extend(pixel_rgba);
+    //                 }
+    //             }
+    //             row_data
+    //         };
+    //         for _ in 0..self.scale {
+    //             pixel_data.extend(&row);
+    //         }
+    //     }
 
-        let handle = Handle::from_pixels(
-            self.width * self.scale,
-            self.frame_height * self.scale,
-            pixel_data.to_owned(),
-        );
+    //     let handle = Handle::from_pixels(
+    //         self.width * self.scale,
+    //         self.frame_height * self.scale,
+    //         pixel_data.to_owned(),
+    //     );
 
-        self.image_handle = handle;
-    }
+    //     self.image_handle = handle;
+    // }
 
     pub fn clear(&mut self) {
         self.pixels.clear();
