@@ -74,7 +74,7 @@ fn fs_main(in: VertexOut) -> @location(0) vec4f {
 	let data_x = u32(real_pos_x) / uniforms.scale;
 	let data_y = u32(real_pos_y) / uniforms.scale;
 
-	if (data_x > uniforms.target_width) {
+	if (data_x >= uniforms.target_width) {
 		return vec4f(0.0, 0.0, 0.0, 1.0);
 	} 
 
