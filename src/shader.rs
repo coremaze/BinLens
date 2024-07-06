@@ -402,6 +402,10 @@ impl FragmentShaderProgram {
     pub fn set_decoding_scheme(&mut self, decoding_scheme: DecodingScheme) {
         self.decoding_scheme = decoding_scheme;
     }
+
+    pub fn decoding_scheme(&self) -> &DecodingScheme {
+        &self.decoding_scheme
+    }
 }
 
 impl shader::Program<super::AppMessage> for FragmentShaderProgram {

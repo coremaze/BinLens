@@ -1,4 +1,4 @@
-use std::{fmt::Display, fs, path::PathBuf};
+use std::{fmt::Display, fs, path::PathBuf, sync::Arc};
 
 use iced::{
     advanced::{graphics::core::event, mouse, Widget},
@@ -13,7 +13,7 @@ use shader::DecodingScheme;
 mod shader;
 
 struct FileInfo {
-    data: Vec<u8>,
+    data: Arc<Vec<u8>>,
     path: PathBuf,
 }
 struct ImageViewApp {
@@ -36,10 +36,10 @@ enum PixelMode {
     RGB,
     BGR,
     BPP8,
-    R5G6B5,
+    G3B5R5G3,
 }
 impl PixelMode {
-    pub const ALL: &'static [Self] = &[Self::RGB, Self::BGR, Self::BPP8, Self::R5G6B5];
+    pub const ALL: &'static [Self] = &[Self::RGB, Self::BGR, Self::BPP8, Self::G3B5R5G3];
 
     pub fn decoding_scheme(&self) -> &'static DecodingScheme {
         match &self {
@@ -142,7 +142,7 @@ impl PixelMode {
                 ],
                 bits_per_pixel: 8,
             },
-            PixelMode::R5G6B5 => &DecodingScheme {
+            PixelMode::G3B5R5G3 => &DecodingScheme {
                 red: [
                     None,
                     None,
@@ -184,7 +184,7 @@ impl Display for PixelMode {
             PixelMode::RGB => "rgb",
             PixelMode::BGR => "bgr",
             PixelMode::BPP8 => "8bpp",
-            PixelMode::R5G6B5 => "R5G6B5",
+            PixelMode::G3B5R5G3 => "G3B5R5G3",
         })
     }
 }
@@ -223,7 +223,7 @@ impl ImageViewApp {
                 //         .collect::<Vec<Pixel>>(),
                 // };
 
-                self.preview.set_file_data(&file.data);
+                self.preview.set_file_data(file.data.clone());
             }
             None => {
                 self.preview.clear();
@@ -277,7 +277,7 @@ impl iced::Application for ImageViewApp {
                 self.update_pixel_decoding();
             }
             AppMessage::ImageScroll(scroll) => {
-                println!("scroll {scroll}");
+                // println!("scroll {scroll}");
                 if let Some(file) = &self.file {
                     self.preview.set_starting_line(scroll);
                 }
@@ -337,7 +337,10 @@ fn get_file() -> Option<FileInfo> {
         return None;
     };
 
-    return Some(FileInfo { data, path });
+    return Some(FileInfo {
+        data: Arc::new(data),
+        path,
+    });
 }
 
 fn preview(app: &ImageViewApp) -> iced::Element<AppMessage> {
@@ -350,11 +353,11 @@ fn preview(app: &ImageViewApp) -> iced::Element<AppMessage> {
         scrollable, text, vertical_rule, vertical_slider, Canvas,
     };
 
-    // let scrollbar = vertical_slider(
-    //     0u32..=app.preview.lines(),
-    //     app.preview.starting_line(),
-    //     AppMessage::ImageScroll,
-    // );
+    let scrollbar = vertical_slider(
+        0u32..=app.preview.lines(),
+        app.preview.starting_line(),
+        AppMessage::ImageScroll,
+    );
 
     let dir = scrollable::Direction::Both {
         vertical: scrollable::Properties::new()
@@ -380,12 +383,12 @@ fn preview(app: &ImageViewApp) -> iced::Element<AppMessage> {
                 .width(Length::Fill)
                 .height(Length::Fill)
         ),
-        // container(scrollbar).padding(Padding {
-        //     top: 0.,
-        //     right: 0.,
-        //     bottom: 0.,
-        //     left: 10.,
-        // })
+        container(scrollbar).padding(Padding {
+            top: 0.,
+            right: 0.,
+            bottom: 0.,
+            left: 10.,
+        })
     )
     .padding(10)
     .width(Length::Fill)
