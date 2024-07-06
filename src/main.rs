@@ -8,6 +8,7 @@ use iced::{
 mod preview;
 use preview::{Pixel, Preview};
 use rayon::iter::{IntoParallelRefIterator, ParallelBridge, ParallelIterator};
+use shader::DecodingScheme;
 
 mod shader;
 
@@ -35,9 +36,147 @@ enum PixelMode {
     RGB,
     BGR,
     BPP8,
+    R5G6B5,
 }
 impl PixelMode {
-    pub const ALL: &'static [Self] = &[Self::RGB, Self::BGR, Self::BPP8];
+    pub const ALL: &'static [Self] = &[Self::RGB, Self::BGR, Self::BPP8, Self::R5G6B5];
+
+    pub fn decoding_scheme(&self) -> &'static DecodingScheme {
+        match &self {
+            PixelMode::RGB => &DecodingScheme {
+                red: [
+                    Some(23),
+                    Some(22),
+                    Some(21),
+                    Some(20),
+                    Some(19),
+                    Some(18),
+                    Some(17),
+                    Some(16),
+                ],
+                green: [
+                    Some(15),
+                    Some(14),
+                    Some(13),
+                    Some(12),
+                    Some(11),
+                    Some(10),
+                    Some(9),
+                    Some(8),
+                ],
+                blue: [
+                    Some(7),
+                    Some(6),
+                    Some(5),
+                    Some(4),
+                    Some(3),
+                    Some(2),
+                    Some(1),
+                    Some(0),
+                ],
+                bits_per_pixel: 24,
+            },
+            PixelMode::BGR => &DecodingScheme {
+                red: [
+                    Some(15),
+                    Some(14),
+                    Some(13),
+                    Some(12),
+                    Some(11),
+                    Some(10),
+                    Some(9),
+                    Some(8),
+                ],
+                green: [
+                    Some(23),
+                    Some(22),
+                    Some(21),
+                    Some(20),
+                    Some(19),
+                    Some(18),
+                    Some(17),
+                    Some(16),
+                ],
+                blue: [
+                    Some(31),
+                    Some(30),
+                    Some(29),
+                    Some(28),
+                    Some(27),
+                    Some(26),
+                    Some(25),
+                    Some(24),
+                ],
+                bits_per_pixel: 24,
+            },
+            PixelMode::BPP8 => &DecodingScheme {
+                red: [
+                    Some(7),
+                    Some(6),
+                    Some(5),
+                    Some(4),
+                    Some(3),
+                    Some(2),
+                    Some(1),
+                    Some(0),
+                ],
+                green: [
+                    Some(7),
+                    Some(6),
+                    Some(5),
+                    Some(4),
+                    Some(3),
+                    Some(2),
+                    Some(1),
+                    Some(0),
+                ],
+                blue: [
+                    Some(7),
+                    Some(6),
+                    Some(5),
+                    Some(4),
+                    Some(3),
+                    Some(2),
+                    Some(1),
+                    None,
+                ],
+                bits_per_pixel: 8,
+            },
+            PixelMode::R5G6B5 => &DecodingScheme {
+                red: [
+                    None,
+                    None,
+                    None,
+                    Some(12),
+                    Some(11),
+                    Some(10),
+                    Some(9),
+                    Some(8),
+                ],
+                green: [
+                    None,
+                    None,
+                    Some(2),
+                    Some(1),
+                    Some(0),
+                    Some(15),
+                    Some(14),
+                    Some(13),
+                ],
+                blue: [
+                    None,
+                    None,
+                    None,
+                    Some(7),
+                    Some(6),
+                    Some(5),
+                    Some(4),
+                    Some(3),
+                ],
+                bits_per_pixel: 16,
+            },
+        }
+    }
 }
 impl Display for PixelMode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -45,6 +184,7 @@ impl Display for PixelMode {
             PixelMode::RGB => "rgb",
             PixelMode::BGR => "bgr",
             PixelMode::BPP8 => "8bpp",
+            PixelMode::R5G6B5 => "R5G6B5",
         })
     }
 }
@@ -53,37 +193,37 @@ impl ImageViewApp {
     pub fn update_pixel_decoding(&mut self) {
         match &self.file {
             Some(file) => {
-                let pixels = match self.pixel_mode {
-                    PixelMode::RGB => file
-                        .data
-                        .chunks_exact(3)
-                        .map(|data| Pixel {
-                            red: data[0],
-                            green: data[1],
-                            blue: data[2],
-                        })
-                        .collect::<Vec<Pixel>>(),
-                    PixelMode::BGR => file
-                        .data
-                        .chunks_exact(3)
-                        .map(|data| Pixel {
-                            blue: data[0],
-                            green: data[1],
-                            red: data[2],
-                        })
-                        .collect::<Vec<Pixel>>(),
-                    PixelMode::BPP8 => file
-                        .data
-                        .iter()
-                        .map(|&data| Pixel {
-                            red: data,
-                            green: data,
-                            blue: data,
-                        })
-                        .collect::<Vec<Pixel>>(),
-                };
+                // let pixels = match self.pixel_mode {
+                //     PixelMode::RGB => file
+                //         .data
+                //         .chunks_exact(3)
+                //         .map(|data| Pixel {
+                //             red: data[0],
+                //             green: data[1],
+                //             blue: data[2],
+                //         })
+                //         .collect::<Vec<Pixel>>(),
+                //     PixelMode::BGR => file
+                //         .data
+                //         .chunks_exact(3)
+                //         .map(|data| Pixel {
+                //             blue: data[0],
+                //             green: data[1],
+                //             red: data[2],
+                //         })
+                //         .collect::<Vec<Pixel>>(),
+                //     PixelMode::BPP8 => file
+                //         .data
+                //         .iter()
+                //         .map(|&data| Pixel {
+                //             red: data,
+                //             green: data,
+                //             blue: data,
+                //         })
+                //         .collect::<Vec<Pixel>>(),
+                // };
 
-                self.preview.set_pixels(pixels);
+                self.preview.set_file_data(&file.data);
             }
             None => {
                 self.preview.clear();
@@ -122,7 +262,9 @@ impl iced::Application for ImageViewApp {
         match message {
             AppMessage::PixelModeSelected(pixel_mode) => {
                 self.pixel_mode = pixel_mode;
-                self.update_pixel_decoding();
+                // self.update_pixel_decoding();
+                self.preview
+                    .set_decoding_scheme(self.pixel_mode.decoding_scheme());
             }
             AppMessage::ImageWidthSelected(image_width) => {
                 self.preview.set_target_width(image_width);
@@ -149,6 +291,7 @@ impl iced::Application for ImageViewApp {
             }
             AppMessage::ByteOffset(offset) => {
                 self.preview.set_byte_offset(offset);
+                // self.update_pixel_decoding();
             }
         }
 
@@ -271,7 +414,7 @@ fn controls(app: &ImageViewApp) -> iced::Element<AppMessage> {
             column!(
                 text(format!("Image width: {}", app.preview.target_width())),
                 slider(
-                    1..=2048,
+                    1..=400,
                     app.preview.target_width(),
                     AppMessage::ImageWidthSelected
                 )
@@ -293,7 +436,7 @@ fn controls(app: &ImageViewApp) -> iced::Element<AppMessage> {
             text("Controls!"),
             text("Controls!!"),
         )
-        .width(200)
+        .width(400)
         .height(Length::Fill)
         .padding(10),
     );
@@ -316,5 +459,6 @@ fn open_button(app: &ImageViewApp) -> iced::Element<AppMessage> {
 }
 
 pub fn main() -> iced::Result {
-    ImageViewApp::run(iced::Settings::default())
+    let mut settings = iced::Settings::default();
+    ImageViewApp::run(settings)
 }
