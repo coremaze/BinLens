@@ -47,6 +47,14 @@ struct VertexOut {
 	@builtin(position) position: vec4f,
 }
 
+fn srgbToLinear(srgb: f32) -> f32 {
+    if srgb <= 0.04045 {
+        return srgb / 12.92;
+    } else {
+        return pow((srgb + 0.055) / 1.055, 2.4);
+    }
+}
+
 @vertex
 fn vs_main(in: VertexIn) -> VertexOut {
 	let uv = vec2f(vec2u((in.vertex_index << 1) & 2, in.vertex_index & 2));
@@ -529,6 +537,5 @@ fn fs_main(in: VertexOut) -> @location(0) vec4f {
 	let g = f32(green) / 255.0;
 	let b = f32(blue) / 255.0;
 
-	
-	return vec4f(r, g, b, 1.0);
+	return vec4f(srgbToLinear(r), srgbToLinear(g), srgbToLinear(b), 1.0);
 }
