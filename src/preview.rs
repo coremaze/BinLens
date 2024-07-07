@@ -14,7 +14,7 @@ use std::{hash::Hash, sync::Arc};
 
 // #[derive(Clone)]
 pub struct Preview {
-    start_bit: u32,
+    start_bit: u64,
     frame_height: u32,
     frame_width: u32,
     file_data: Arc<Vec<u8>>,
@@ -34,12 +34,12 @@ impl Default for Preview {
 }
 
 impl Preview {
-    pub fn set_start_bit(&mut self, offset: u32) {
+    pub fn set_start_bit(&mut self, offset: u64) {
         self.start_bit = offset;
         self.update_program_buffer();
     }
 
-    pub fn start_bit(&self) -> u32 {
+    pub fn start_bit(&self) -> u64 {
         self.start_bit
     }
 
@@ -47,8 +47,8 @@ impl Preview {
         &self.file_data
     }
 
-    pub fn bits_per_line(&self) -> u32 {
-        self.target_width() * self.decoding_scheme().bits_per_pixel
+    pub fn bits_per_line(&self) -> u64 {
+        u64::from(self.target_width()) * u64::from(self.decoding_scheme().bits_per_pixel)
     }
 
     pub fn scale(&self) -> u32 {
@@ -102,7 +102,7 @@ impl Preview {
         let bits_per_pixel = self.decoding_scheme().bits_per_pixel;
 
         let start_byte = self.start_bit / 8;
-        let bit_offset = self.start_bit % 8;
+        let bit_offset = (self.start_bit % 8) as u32;
 
         let start = start_byte as usize;
         let max_size = (((self.frame_height * self.frame_width * bits_per_pixel) + 1) / 8) as usize;

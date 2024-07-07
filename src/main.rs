@@ -278,11 +278,11 @@ impl iced::Application for ImageViewApp {
             AppMessage::ImageScroll(scroll) => {
                 let scroll = u32::MAX - scroll;
                 // println!("scroll {scroll}");
-                let file_len = self.preview.file_data().len();
-                let ratio = u32::MAX as f64 / file_len as f64;
-                let file_offset = (scroll as f64 / ratio as f64).round() as u32;
+                let file_len = u64::try_from(self.preview.file_data().len()).unwrap_or(u64::MAX);
+                let ratio = f64::from(u32::MAX) / file_len as f64;
+                let file_offset_bytes: u64 = (f64::from(scroll) / ratio).round() as u64;
 
-                let bit_offset = file_offset * 8;
+                let bit_offset = file_offset_bytes * 8;
 
                 // This makes sure we only snap to the beginnings of new lines, and keep the bit alignment if it is not a multiple of 8
                 let scroll_bit = bit_offset
@@ -313,7 +313,7 @@ impl iced::Application for ImageViewApp {
                 self.preview.set_scale(scale);
             }
             AppMessage::BitOffset(offset) => {
-                self.preview.set_start_bit(offset);
+                self.preview.set_start_bit(offset as u64);
             }
         }
 
@@ -459,7 +459,11 @@ fn controls(app: &ImageViewApp) -> iced::Element<AppMessage> {
                     app.preview.start_bit() / 8,
                     app.preview.start_bit() % 8
                 )),
-                slider(0..=(24 * 8), app.preview.start_bit(), AppMessage::BitOffset)
+                slider(
+                    0..=(24 * 8),
+                    app.preview.start_bit() as u32,
+                    AppMessage::BitOffset
+                )
             ),
             // horizontal_rule(1),
             // text("Controls"),
