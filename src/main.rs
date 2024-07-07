@@ -1,12 +1,8 @@
 use std::{fmt::Display, fs, path::PathBuf, sync::Arc};
 
-use iced::{
-    advanced::{graphics::core::event, mouse, Widget},
-    widget::{responsive, scrollable::Direction, Scrollable},
-    window, Application, Event, Subscription,
-};
+use iced::{window, Application, Event, Subscription};
 mod preview;
-use preview::{Pixel, Preview};
+use preview::Preview;
 use shader::DecodingScheme;
 
 mod shader;
@@ -321,11 +317,7 @@ impl iced::Application for ImageViewApp {
     }
 
     fn view(&self) -> iced::Element<'_, Self::Message, Self::Theme, iced::Renderer> {
-        use iced::widget::{
-            button, canvas, column, container, horizontal_rule, image::Handle, pick_list, row,
-            scrollable, slider, text, vertical_rule,
-        };
-        use iced::Length;
+        use iced::widget::{row, vertical_rule};
 
         let preview = preview(self);
         let controls = controls(self);
@@ -359,25 +351,21 @@ fn get_file() -> Option<FileInfo> {
         return None;
     };
 
-    return Some(FileInfo {
+    Some(FileInfo {
         data: Arc::new(data),
         path,
-    });
+    })
 }
 
 fn preview(app: &ImageViewApp) -> iced::Element<AppMessage> {
-    use iced::ContentFit;
     use iced::Length;
     use iced::Padding;
 
-    use iced::widget::{
-        button, canvas, column, container, horizontal_rule, image::Handle, pick_list, row,
-        scrollable, text, vertical_rule, vertical_slider, Canvas,
-    };
+    use iced::widget::{container, row, scrollable, vertical_slider};
 
     let file_len_bits = app.preview.file_data().len() * 8;
     let ratio = file_len_bits as f64 / u32::MAX as f64;
-    let scroll_offset = (app.preview.start_bit() as f64 / ratio as f64).round() as u32;
+    let scroll_offset = (app.preview.start_bit() as f64 / ratio).round() as u32;
 
     let scrollbar = vertical_slider(
         0u32..=u32::MAX,
@@ -385,7 +373,7 @@ fn preview(app: &ImageViewApp) -> iced::Element<AppMessage> {
         AppMessage::ImageScroll,
     );
 
-    let dir = scrollable::Direction::Both {
+    let _dir = scrollable::Direction::Both {
         vertical: scrollable::Properties::new()
             .margin(0)
             .scroller_width(0)
@@ -423,12 +411,9 @@ fn preview(app: &ImageViewApp) -> iced::Element<AppMessage> {
 }
 
 fn controls(app: &ImageViewApp) -> iced::Element<AppMessage> {
-    use iced::{border::Radius, Border, Color, Length};
+    use iced::Length;
 
-    use iced::widget::{
-        button, canvas, column, container, horizontal_rule, image::Handle, pick_list, row,
-        scrollable, scrollable::Scrollbar, scrollable::Scroller, slider, text, vertical_rule,
-    };
+    use iced::widget::{column, container, horizontal_rule, pick_list, slider, text};
 
     let controls = container(
         column!(
@@ -477,13 +462,8 @@ fn controls(app: &ImageViewApp) -> iced::Element<AppMessage> {
     controls.into()
 }
 
-fn open_button(app: &ImageViewApp) -> iced::Element<AppMessage> {
+fn open_button(_app: &ImageViewApp) -> iced::Element<AppMessage> {
     use iced::Length;
-
-    use iced::widget::{
-        button, canvas, column, container, horizontal_rule, image::Handle, pick_list, row,
-        scrollable, slider, text, vertical_rule,
-    };
 
     let button = iced::widget::Button::new("Open")
         .on_press(AppMessage::OpenFileDialog)
@@ -493,6 +473,6 @@ fn open_button(app: &ImageViewApp) -> iced::Element<AppMessage> {
 }
 
 pub fn main() -> iced::Result {
-    let mut settings = iced::Settings::default();
+    let settings = iced::Settings::default();
     ImageViewApp::run(settings)
 }

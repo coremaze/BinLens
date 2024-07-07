@@ -1,7 +1,3 @@
-// struct DecodingScheme {
-
-// }
-
 struct Uniforms {
 	viewport_position: vec2f,
 	viewport_resolution: vec2f,
@@ -35,7 +31,6 @@ struct Uniforms {
 	decoding_bits_per_pixel: u32,
 }
 
-
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
 @group(0) @binding(1) var<storage, read> data: array<u32>;
 
@@ -64,6 +59,7 @@ fn vs_main(in: VertexIn) -> VertexOut {
 
 @fragment
 fn fs_main(in: VertexOut) -> @location(0) vec4f {
+	// Without this, the shader starts in the 10px of padding we've provided
 	let real_pos_x = in.position.x - uniforms.viewport_position.x;
 	let real_pos_y = in.position.y - uniforms.viewport_position.y;
 
@@ -71,23 +67,18 @@ fn fs_main(in: VertexOut) -> @location(0) vec4f {
 		return vec4f(0.0, 0.0, 0.0, 1.0);
 	}
 
+	// Get the x and y position of the binary image to display
+	// This is different from real_pos_x and y because of the ability to scale
 	let data_x = u32(real_pos_x) / uniforms.scale;
 	let data_y = u32(real_pos_y) / uniforms.scale;
 
+	// Do not draw anything past the target_width
 	if (data_x >= uniforms.target_width) {
 		return vec4f(0.0, 0.0, 0.0, 1.0);
 	} 
 
-	// if (real_pos_x < 20.0) {
-	// 	return vec4f(1.0, 0.0, 0.0, 1.0);
-	// }
-
-	// if (real_pos_y < 20.0) {
-	// 	return vec4f(0.0, 0.0, 1.0, 1.0);
-	// }
-
+	// Figure out which pixel, linearly, we need to draw
 	let pixel_index = (data_y * u32(uniforms.target_width) + data_x);
-
 
 	var red: u32 = 0;
 	var green: u32 = 0;

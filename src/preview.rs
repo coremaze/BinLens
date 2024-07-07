@@ -1,16 +1,7 @@
-use iced::{
-    advanced::{image, layout, Widget},
-    widget::{
-        canvas::{self, Frame, Geometry},
-        image::{FilterMethod, Handle},
-    },
-    Element, Length, Rectangle, Renderer, Size, Theme, Transformation,
-};
-
 use crate::shader::DecodingScheme;
 
 use super::shader::FragmentShaderProgram;
-use std::{hash::Hash, sync::Arc};
+use std::sync::Arc;
 
 // #[derive(Clone)]
 pub struct Preview {
@@ -113,7 +104,7 @@ impl Preview {
         let program_buffer = buf_limited
             .chunks(4)
             .map(|bytes| {
-                let a = bytes.get(0).unwrap_or(&0);
+                let a = bytes.first().unwrap_or(&0);
                 let b = bytes.get(1).unwrap_or(&0);
                 let c = bytes.get(2).unwrap_or(&0);
                 let d = bytes.get(3).unwrap_or(&0);

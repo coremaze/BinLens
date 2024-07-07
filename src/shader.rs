@@ -1,15 +1,14 @@
 use std::sync::Arc;
 
 use glam::Vec2;
-use iced::advanced::Shell;
-use iced::event::Status;
+
 use iced::mouse;
-use iced::mouse::Cursor;
+
 use iced::widget::shader::wgpu::util::DeviceExt;
-use iced::widget::shader::wgpu::{self, include_spirv_raw};
-use iced::widget::shader::Event;
-use iced::widget::{column, row, shader, slider, text};
-use iced::{Alignment, Element, Length, Rectangle, Sandbox, Settings, Size};
+use iced::widget::shader::wgpu::{self};
+
+use iced::widget::shader;
+use iced::{Rectangle, Sandbox, Size};
 
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 #[repr(C)]
@@ -153,7 +152,7 @@ impl FragmentShaderPipeline {
 
         // let pixel_data = vec![0x000000ffu32; 2000 * 2000];
         let mut pixel_data = Vec::<u32>::new();
-        for i in 0..=(10_000_000) {
+        for i in 0..=10_000_000 {
             pixel_data.push(i);
         }
         let pixel_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -389,7 +388,7 @@ impl FragmentShaderProgram {
     }
 
     pub fn set_buffer(&mut self, mut buffer: Vec<u32>) {
-        if buffer.len() < 1 {
+        if buffer.is_empty() {
             buffer.push(0u32);
         }
         self.buffer = Arc::new(buffer);
