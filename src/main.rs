@@ -7,7 +7,6 @@ use iced::{
 };
 mod preview;
 use preview::{Pixel, Preview};
-use rayon::iter::{IntoParallelRefIterator, ParallelBridge, ParallelIterator};
 use shader::DecodingScheme;
 
 mod shader;
@@ -28,7 +27,7 @@ enum AppMessage {
     OpenFileDialog,
     ImageScroll(u32),
     ImageScale(u32),
-    ByteOffset(u32),
+    BitOffset(u32),
     WindowResize { width: u32, height: u32 },
 }
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -277,10 +276,34 @@ impl iced::Application for ImageViewApp {
                 self.update_pixel_decoding();
             }
             AppMessage::ImageScroll(scroll) => {
+                let scroll = u32::MAX - scroll;
                 // println!("scroll {scroll}");
-                if let Some(file) = &self.file {
-                    self.preview.set_starting_line(scroll);
-                }
+                let file_len = self.preview.file_data().len();
+                let ratio = u32::MAX as f64 / file_len as f64;
+                let file_offset = (scroll as f64 / ratio as f64).round() as u32;
+
+                let bit_offset = file_offset * 8;
+
+                // This makes sure we only snap to the beginnings of new lines, and keep the bit alignment if it is not a multiple of 8
+                let scroll_bit = bit_offset
+                    // get multiple of bits_per_line
+                    .checked_div(self.preview.bits_per_line())
+                    .unwrap_or(0)
+                    .checked_mul(self.preview.bits_per_line())
+                    .unwrap_or(0)
+                    // add bit offset
+                    .saturating_add(
+                        self.preview
+                            .start_bit()
+                            .checked_rem_euclid(self.preview.bits_per_line())
+                            .unwrap_or(0),
+                    );
+
+                self.preview.set_start_bit(scroll_bit);
+
+                // if let Some(file) = &self.file {
+                //     // self.preview.set_starting_line(scroll);
+                // }
             }
             AppMessage::WindowResize { width, height } => {
                 self.preview.set_frame_height(height);
@@ -289,9 +312,8 @@ impl iced::Application for ImageViewApp {
             AppMessage::ImageScale(scale) => {
                 self.preview.set_scale(scale);
             }
-            AppMessage::ByteOffset(offset) => {
-                self.preview.set_byte_offset(offset);
-                // self.update_pixel_decoding();
+            AppMessage::BitOffset(offset) => {
+                self.preview.set_start_bit(offset);
             }
         }
 
@@ -353,9 +375,13 @@ fn preview(app: &ImageViewApp) -> iced::Element<AppMessage> {
         scrollable, text, vertical_rule, vertical_slider, Canvas,
     };
 
+    let file_len_bits = app.preview.file_data().len() * 8;
+    let ratio = file_len_bits as f64 / u32::MAX as f64;
+    let scroll_offset = (app.preview.start_bit() as f64 / ratio as f64).round() as u32;
+
     let scrollbar = vertical_slider(
-        0u32..=app.preview.lines(),
-        app.preview.starting_line(),
+        0u32..=u32::MAX,
+        u32::MAX - scroll_offset,
         AppMessage::ImageScroll,
     );
 
@@ -427,17 +453,18 @@ fn controls(app: &ImageViewApp) -> iced::Element<AppMessage> {
                 slider(1..=10, app.preview.scale(), AppMessage::ImageScale)
             ),
             column!(
-                text(format!("Byte offset: {}", app.preview.byte_offset())),
-                slider(
-                    0..=app.preview.target_width(),
-                    app.preview.byte_offset(),
-                    AppMessage::ByteOffset
-                )
+                text(format!(
+                    "Start bit: {} ({} bytes, {} bits)",
+                    app.preview.start_bit(),
+                    app.preview.start_bit() / 8,
+                    app.preview.start_bit() % 8
+                )),
+                slider(0..=(24 * 8), app.preview.start_bit(), AppMessage::BitOffset)
             ),
-            horizontal_rule(1),
-            text("Controls"),
-            text("Controls!"),
-            text("Controls!!"),
+            // horizontal_rule(1),
+            // text("Controls"),
+            // text("Controls!"),
+            // text("Controls!!"),
         )
         .width(400)
         .height(Length::Fill)

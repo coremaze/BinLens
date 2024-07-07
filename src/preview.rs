@@ -6,7 +6,6 @@ use iced::{
     },
     Element, Length, Rectangle, Renderer, Size, Theme, Transformation,
 };
-use rayon::iter::{IntoParallelIterator, ParallelBridge, ParallelIterator};
 
 use crate::shader::DecodingScheme;
 
@@ -15,9 +14,7 @@ use std::{hash::Hash, sync::Arc};
 
 // #[derive(Clone)]
 pub struct Preview {
-    byte_offset: u32,
-    scroll_row: u32,
-    scroll_bit_offset: u32,
+    start_bit: u32,
     frame_height: u32,
     frame_width: u32,
     file_data: Arc<Vec<u8>>,
@@ -29,9 +26,7 @@ impl Default for Preview {
         Self {
             frame_height: 0,
             frame_width: 0,
-            scroll_row: 0,
-            scroll_bit_offset: 0,
-            byte_offset: 0,
+            start_bit: 0,
             program: FragmentShaderProgram::new(),
             file_data: Arc::new(Vec::<u8>::new()),
         }
@@ -39,19 +34,21 @@ impl Default for Preview {
 }
 
 impl Preview {
-    pub fn set_byte_offset(&mut self, offset: u32) {
-        self.byte_offset = offset;
-        self.program
-            .set_bit_offset(self.byte_offset * 8 + self.scroll_bit_offset);
+    pub fn set_start_bit(&mut self, offset: u32) {
+        self.start_bit = offset;
+        self.update_program_buffer();
     }
 
-    pub fn byte_offset(&self) -> u32 {
-        self.byte_offset
+    pub fn start_bit(&self) -> u32 {
+        self.start_bit
     }
 
-    fn set_scroll_bit_offset(&mut self, offset: u32) {
-        self.scroll_bit_offset = offset;
-        self.set_byte_offset(self.byte_offset());
+    pub fn file_data(&self) -> &[u8] {
+        &self.file_data
+    }
+
+    pub fn bits_per_line(&self) -> u32 {
+        self.target_width() * self.decoding_scheme().bits_per_pixel
     }
 
     pub fn scale(&self) -> u32 {
@@ -78,19 +75,9 @@ impl Preview {
         self.frame_width = frame_width;
     }
 
-    pub fn set_starting_line(&mut self, line: u32) {
-        self.scroll_row = line;
-        self.update_program_buffer();
-    }
-
-    pub fn starting_line(&self) -> u32 {
-        self.scroll_row
-    }
-
     pub fn lines(&self) -> u32 {
         let bits = self.file_data.len() * 8;
-        let bits_per_line = self.target_width() * self.decoding_scheme().bits_per_pixel;
-        let lines = bits.checked_div(bits_per_line as usize).unwrap_or(0);
+        let lines = bits.checked_div(self.bits_per_line() as usize).unwrap_or(0);
         lines as u32
     }
 
@@ -113,17 +100,14 @@ impl Preview {
 
     fn update_program_buffer(&mut self) {
         let bits_per_pixel = self.decoding_scheme().bits_per_pixel;
-        let pixels_per_row = self.target_width();
-        let row_offset = self.starting_line();
 
-        let start_bit = bits_per_pixel * pixels_per_row * row_offset;
-        let start_byte = start_bit / 8;
-        let scroll_bit_offset = start_bit % 8;
+        let start_byte = self.start_bit / 8;
+        let bit_offset = self.start_bit % 8;
 
         let start = start_byte as usize;
         let max_size = (((self.frame_height * self.frame_width * bits_per_pixel) + 1) / 8) as usize;
 
-        let buf_beginning = self.file_data.get(start..).unwrap_or(&self.file_data);
+        let buf_beginning = self.file_data.get(start..).unwrap_or_default();
         let buf_limited = buf_beginning.get(..max_size).unwrap_or(buf_beginning);
 
         let program_buffer = buf_limited
@@ -138,7 +122,7 @@ impl Preview {
             })
             .collect::<Vec<u32>>();
 
-        self.set_scroll_bit_offset(scroll_bit_offset);
+        self.program.set_bit_offset(bit_offset);
         self.program.set_buffer(program_buffer);
     }
 }
