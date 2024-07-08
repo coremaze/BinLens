@@ -316,7 +316,8 @@ impl iced::Application for ImageViewApp {
                 let lines_scrolled = match delta {
                     iced::mouse::ScrollDelta::Lines { x: _, y } => y,
                     iced::mouse::ScrollDelta::Pixels { x: _, y } => {
-                        (y + (self.preview.scale() - 1) as f32) * self.preview.scale() as f32
+                        //(y + (self.preview.scale() - 1) as f32) / self.preview.scale() as f32
+                        y
                     }
                 }
                 .round() as i64;
@@ -325,7 +326,7 @@ impl iced::Application for ImageViewApp {
                 let bits_per_line = self.preview.bits_per_line();
 
                 let forward = lines_scrolled.is_negative();
-                let amount = (lines_scrolled.abs() as u64) * bits_per_line * 30;
+                let amount = (lines_scrolled.abs() as u64) * bits_per_line;
 
                 let new_start_bit = if forward {
                     old_start_bit.saturating_add(amount)
@@ -333,7 +334,9 @@ impl iced::Application for ImageViewApp {
                     old_start_bit.saturating_sub(amount)
                 };
 
-                self.preview.set_start_bit(new_start_bit);
+                if new_start_bit < (self.preview.file_data().len() * 8) as u64 {
+                    self.preview.set_start_bit(new_start_bit);
+                }
             }
         }
 
