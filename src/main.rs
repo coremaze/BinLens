@@ -1,6 +1,10 @@
 use std::{fmt::Display, fs, path::PathBuf, sync::Arc};
 
-use iced::{mouse::ScrollDelta, window, Application, Event, Subscription};
+use iced::{
+    mouse::ScrollDelta,
+    widget::{checkbox, row},
+    window, Application, Event, Subscription,
+};
 mod preview;
 use preview::Preview;
 use shader::DecodingScheme;
@@ -26,6 +30,7 @@ enum AppMessage {
     ScrollWheel(ScrollDelta),
     BitOffset(u32),
     WindowResize { width: u32, height: u32 },
+    ToggleGrid(bool),
 }
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 enum PixelMode {
@@ -274,33 +279,9 @@ impl iced::Application for ImageViewApp {
             }
             AppMessage::ImageScroll(scroll) => {
                 let scroll = u32::MAX - scroll;
-                // println!("scroll {scroll}");
-                let file_len = u64::try_from(self.preview.file_data().len()).unwrap_or(u64::MAX);
-                let ratio = f64::from(u32::MAX) / file_len as f64;
-                let file_offset_bytes: u64 = (f64::from(scroll) / ratio).round() as u64;
-
-                let bit_offset = file_offset_bytes * 8;
-
-                // This makes sure we only snap to the beginnings of new lines, and keep the bit alignment if it is not a multiple of 8
-                let scroll_bit = bit_offset
-                    // get multiple of bits_per_line
-                    .checked_div(self.preview.bits_per_line())
-                    .unwrap_or(0)
-                    .checked_mul(self.preview.bits_per_line())
-                    .unwrap_or(0)
-                    // add bit offset
-                    .saturating_add(
-                        self.preview
-                            .start_bit()
-                            .checked_rem_euclid(self.preview.bits_per_line())
-                            .unwrap_or(0),
-                    );
-
-                self.preview.set_start_bit(scroll_bit);
-
-                // if let Some(file) = &self.file {
-                //     // self.preview.set_starting_line(scroll);
-                // }
+                let ratio = f64::from(u32::MAX) / self.preview.total_lines() as f64;
+                let new_line: u64 = (f64::from(scroll) / ratio).round() as u64;
+                self.preview.go_to_line(new_line);
             }
             AppMessage::WindowResize { width, height } => {
                 self.preview.set_frame_height(height);
@@ -314,29 +295,27 @@ impl iced::Application for ImageViewApp {
             }
             AppMessage::ScrollWheel(delta) => {
                 let lines_scrolled = match delta {
-                    iced::mouse::ScrollDelta::Lines { x: _, y } => y,
+                    iced::mouse::ScrollDelta::Lines { x: _, y } => y * 5.0,
                     iced::mouse::ScrollDelta::Pixels { x: _, y } => {
                         //(y + (self.preview.scale() - 1) as f32) / self.preview.scale() as f32
-                        y
+                        y * 5.0
                     }
                 }
                 .round() as i64;
 
-                let old_start_bit = self.preview.start_bit();
-                let bits_per_line = self.preview.bits_per_line();
-
                 let forward = lines_scrolled.is_negative();
-                let amount = (lines_scrolled.abs() as u64) * bits_per_line;
+                let amount = lines_scrolled.abs() as u64;
 
-                let new_start_bit = if forward {
-                    old_start_bit.saturating_add(amount)
+                let go_to_line = if forward {
+                    self.preview.current_line().saturating_add(amount)
                 } else {
-                    old_start_bit.saturating_sub(amount)
+                    self.preview.current_line().saturating_sub(amount)
                 };
 
-                if new_start_bit < (self.preview.file_data().len() * 8) as u64 {
-                    self.preview.set_start_bit(new_start_bit);
-                }
+                self.preview.go_to_line(go_to_line);
+            }
+            AppMessage::ToggleGrid(grid) => {
+                self.preview.set_grid(grid);
             }
         }
 
@@ -480,6 +459,8 @@ fn controls(app: &ImageViewApp) -> iced::Element<AppMessage> {
                     AppMessage::BitOffset
                 )
             ),
+            checkbox("Grid", app.preview.grid())
+                .on_toggle(|checked| { AppMessage::ToggleGrid(checked) }),
             // horizontal_rule(1),
             // text("Controls"),
             // text("Controls!"),

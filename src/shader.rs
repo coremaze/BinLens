@@ -43,6 +43,8 @@ pub struct Uniforms {
     decoding_blue6bit: i32,
     decoding_blue7bit: i32,
     decoding_bits_per_pixel: u32,
+    grid: u32,
+    pad: u32,
 }
 
 #[derive(Clone, Debug)]
@@ -259,6 +261,7 @@ pub struct FragmentShaderPrimitive {
     buffer: Arc<Vec<u32>>,
     decoding_scheme: DecodingScheme,
     bit_offset: u32,
+    grid: bool,
 }
 
 impl FragmentShaderPrimitive {
@@ -268,6 +271,7 @@ impl FragmentShaderPrimitive {
         buffer: Arc<Vec<u32>>,
         bit_offset: u32,
         decoding_scheme: DecodingScheme,
+        grid: bool,
     ) -> Self {
         Self {
             target_width,
@@ -275,6 +279,7 @@ impl FragmentShaderPrimitive {
             buffer,
             bit_offset,
             decoding_scheme,
+            grid,
         }
     }
 }
@@ -334,6 +339,8 @@ impl shader::Primitive for FragmentShaderPrimitive {
                 decoding_blue6bit: d(self.decoding_scheme.blue[6]),
                 decoding_blue7bit: d(self.decoding_scheme.blue[7]),
                 decoding_bits_per_pixel: self.decoding_scheme.bits_per_pixel,
+                grid: if self.grid { 1 } else { 0 },
+                pad: 0,
             },
             self.buffer.as_slice(),
         );
@@ -358,6 +365,7 @@ pub struct FragmentShaderProgram {
     buffer: Arc<Vec<u32>>,
     bit_offset: u32,
     decoding_scheme: DecodingScheme,
+    grid: bool,
 }
 
 impl FragmentShaderProgram {
@@ -368,7 +376,16 @@ impl FragmentShaderProgram {
             buffer: Arc::new(vec![0u32; 1]),
             bit_offset: 0,
             decoding_scheme: Default::default(),
+            grid: false,
         }
+    }
+
+    pub fn set_grid(&mut self, grid: bool) {
+        self.grid = grid;
+    }
+
+    pub fn grid(&self) -> bool {
+        self.grid
     }
 
     pub fn set_target_width(&mut self, target_width: u32) {
@@ -423,6 +440,7 @@ impl shader::Program<super::AppMessage> for FragmentShaderProgram {
             self.buffer.clone(),
             self.bit_offset,
             self.decoding_scheme.clone(),
+            self.grid,
         )
     }
 }

@@ -29,6 +29,8 @@ struct Uniforms {
 	decoding_blue6bit: i32,
 	decoding_blue7bit: i32,
 	decoding_bits_per_pixel: u32,
+	grid: u32,
+	pad: u32,
 }
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
@@ -65,6 +67,12 @@ fn fs_main(in: VertexOut) -> @location(0) vec4f {
 
 	if (real_pos_x < 0.0 || real_pos_y < 0.0) {
 		return vec4f(0.0, 0.0, 0.0, 1.0);
+	}
+
+	if (uniforms.grid != 0 && uniforms.scale > 1) {
+		if ((u32(real_pos_x) % uniforms.scale == 0) || (u32(real_pos_y) % uniforms.scale == 0)) {
+			return vec4f(0.0, 0.0, 0.0, 1.0);
+		}
 	}
 
 	// Get the x and y position of the binary image to display

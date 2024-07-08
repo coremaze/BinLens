@@ -25,6 +25,14 @@ impl Default for Preview {
 }
 
 impl Preview {
+    pub fn set_grid(&mut self, grid: bool) {
+        self.program.set_grid(grid);
+    }
+
+    pub fn grid(&self) -> bool {
+        self.program.grid()
+    }
+
     pub fn set_start_bit(&mut self, offset: u64) {
         self.start_bit = offset;
         self.update_program_buffer();
@@ -66,10 +74,32 @@ impl Preview {
         self.frame_width = frame_width;
     }
 
-    pub fn lines(&self) -> u32 {
-        let bits = self.file_data.len() * 8;
-        let lines = bits.checked_div(self.bits_per_line() as usize).unwrap_or(0);
-        lines as u32
+    pub fn total_lines(&self) -> u64 {
+        let bits = (self.file_data.len() * 8) as u64;
+        let lines = bits.checked_div(self.bits_per_line()).unwrap_or(0);
+        lines
+    }
+
+    pub fn current_line(&self) -> u64 {
+        self.start_bit
+            .checked_div(self.bits_per_line())
+            .unwrap_or(0)
+    }
+
+    pub fn go_to_line(&mut self, line: u64) {
+        let remainder = self
+            .start_bit
+            .checked_rem_euclid(self.bits_per_line())
+            .unwrap_or(0);
+
+        let line = if line > self.total_lines() {
+            self.total_lines()
+        } else {
+            line
+        };
+
+        let new_offset = (line * self.bits_per_line()) + remainder;
+        self.set_start_bit(new_offset);
     }
 
     pub fn set_file_data(&mut self, data: Arc<Vec<u8>>) {
