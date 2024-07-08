@@ -1,6 +1,6 @@
 use std::{fmt::Display, fs, path::PathBuf, sync::Arc};
 
-use iced::{window, Application, Event, Subscription};
+use iced::{mouse::ScrollDelta, window, Application, Event, Subscription};
 mod preview;
 use preview::Preview;
 use shader::DecodingScheme;
@@ -23,6 +23,7 @@ enum AppMessage {
     OpenFileDialog,
     ImageScroll(u32),
     ImageScale(u32),
+    ScrollWheel(ScrollDelta),
     BitOffset(u32),
     WindowResize { width: u32, height: u32 },
 }
@@ -311,6 +312,29 @@ impl iced::Application for ImageViewApp {
             AppMessage::BitOffset(offset) => {
                 self.preview.set_start_bit(offset as u64);
             }
+            AppMessage::ScrollWheel(delta) => {
+                let lines_scrolled = match delta {
+                    iced::mouse::ScrollDelta::Lines { x: _, y } => y,
+                    iced::mouse::ScrollDelta::Pixels { x: _, y } => {
+                        (y + (self.preview.scale() - 1) as f32) * self.preview.scale() as f32
+                    }
+                }
+                .round() as i64;
+
+                let old_start_bit = self.preview.start_bit();
+                let bits_per_line = self.preview.bits_per_line();
+
+                let forward = lines_scrolled.is_negative();
+                let amount = (lines_scrolled.abs() as u64) * bits_per_line * 30;
+
+                let new_start_bit = if forward {
+                    old_start_bit.saturating_add(amount)
+                } else {
+                    old_start_bit.saturating_sub(amount)
+                };
+
+                self.preview.set_start_bit(new_start_bit);
+            }
         }
 
         iced::Command::none()
@@ -336,6 +360,9 @@ impl iced::Application for ImageViewApp {
                 };
 
                 new_size.map(|(width, height)| AppMessage::WindowResize { width, height })
+            }
+            Event::Mouse(iced::mouse::Event::WheelScrolled { delta }) => {
+                Some(AppMessage::ScrollWheel(delta))
             }
             _ => None,
         })
