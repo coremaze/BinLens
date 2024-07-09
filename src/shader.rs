@@ -8,7 +8,7 @@ use iced::widget::shader::wgpu::util::DeviceExt;
 use iced::widget::shader::wgpu::{self};
 
 use iced::widget::shader;
-use iced::{Rectangle, Sandbox, Size};
+use iced::{Rectangle, Size};
 
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 #[repr(C)]

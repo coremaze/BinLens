@@ -1,4 +1,4 @@
-use std::{fmt::Display, fs, path::PathBuf, sync::Arc};
+use std::{fs, path::PathBuf, sync::Arc};
 
 use iced::{
     mouse::ScrollDelta,
@@ -7,7 +7,9 @@ use iced::{
 };
 mod preview;
 use preview::Preview;
-use shader::DecodingScheme;
+
+mod pixel_mode;
+use pixel_mode::PixelMode;
 
 mod shader;
 
@@ -31,163 +33,6 @@ enum AppMessage {
     BitOffset(u32),
     WindowResize { width: u32, height: u32 },
     ToggleGrid(bool),
-}
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-enum PixelMode {
-    RGB,
-    BGR,
-    BPP8,
-    G3B5R5G3,
-}
-impl PixelMode {
-    pub const ALL: &'static [Self] = &[Self::RGB, Self::BGR, Self::BPP8, Self::G3B5R5G3];
-
-    pub fn decoding_scheme(&self) -> &'static DecodingScheme {
-        match &self {
-            PixelMode::RGB => &DecodingScheme {
-                red: [
-                    Some(23),
-                    Some(22),
-                    Some(21),
-                    Some(20),
-                    Some(19),
-                    Some(18),
-                    Some(17),
-                    Some(16),
-                ],
-                green: [
-                    Some(15),
-                    Some(14),
-                    Some(13),
-                    Some(12),
-                    Some(11),
-                    Some(10),
-                    Some(9),
-                    Some(8),
-                ],
-                blue: [
-                    Some(7),
-                    Some(6),
-                    Some(5),
-                    Some(4),
-                    Some(3),
-                    Some(2),
-                    Some(1),
-                    Some(0),
-                ],
-                bits_per_pixel: 24,
-            },
-            PixelMode::BGR => &DecodingScheme {
-                red: [
-                    Some(15),
-                    Some(14),
-                    Some(13),
-                    Some(12),
-                    Some(11),
-                    Some(10),
-                    Some(9),
-                    Some(8),
-                ],
-                green: [
-                    Some(23),
-                    Some(22),
-                    Some(21),
-                    Some(20),
-                    Some(19),
-                    Some(18),
-                    Some(17),
-                    Some(16),
-                ],
-                blue: [
-                    Some(31),
-                    Some(30),
-                    Some(29),
-                    Some(28),
-                    Some(27),
-                    Some(26),
-                    Some(25),
-                    Some(24),
-                ],
-                bits_per_pixel: 24,
-            },
-            PixelMode::BPP8 => &DecodingScheme {
-                red: [
-                    Some(7),
-                    Some(6),
-                    Some(5),
-                    Some(4),
-                    Some(3),
-                    Some(2),
-                    Some(1),
-                    Some(0),
-                ],
-                green: [
-                    Some(7),
-                    Some(6),
-                    Some(5),
-                    Some(4),
-                    Some(3),
-                    Some(2),
-                    Some(1),
-                    Some(0),
-                ],
-                blue: [
-                    Some(7),
-                    Some(6),
-                    Some(5),
-                    Some(4),
-                    Some(3),
-                    Some(2),
-                    Some(1),
-                    None,
-                ],
-                bits_per_pixel: 8,
-            },
-            PixelMode::G3B5R5G3 => &DecodingScheme {
-                red: [
-                    None,
-                    None,
-                    None,
-                    Some(12),
-                    Some(11),
-                    Some(10),
-                    Some(9),
-                    Some(8),
-                ],
-                green: [
-                    None,
-                    None,
-                    Some(2),
-                    Some(1),
-                    Some(0),
-                    Some(15),
-                    Some(14),
-                    Some(13),
-                ],
-                blue: [
-                    None,
-                    None,
-                    None,
-                    Some(7),
-                    Some(6),
-                    Some(5),
-                    Some(4),
-                    Some(3),
-                ],
-                bits_per_pixel: 16,
-            },
-        }
-    }
-}
-impl Display for PixelMode {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(match self {
-            PixelMode::RGB => "rgb",
-            PixelMode::BGR => "bgr",
-            PixelMode::BPP8 => "8bpp",
-            PixelMode::G3B5R5G3 => "G3B5R5G3",
-        })
-    }
 }
 
 impl ImageViewApp {
@@ -242,7 +87,7 @@ impl iced::Application for ImageViewApp {
     fn new(_flags: Self::Flags) -> (Self, iced::Command<Self::Message>) {
         (
             Self {
-                pixel_mode: PixelMode::RGB,
+                pixel_mode: PixelMode::Rgb,
                 file: None,
                 preview: Preview::default(),
             },
@@ -304,7 +149,7 @@ impl iced::Application for ImageViewApp {
                 .round() as i64;
 
                 let forward = lines_scrolled.is_negative();
-                let amount = lines_scrolled.abs() as u64;
+                let amount = lines_scrolled.unsigned_abs();
 
                 let go_to_line = if forward {
                     self.preview.current_line().saturating_add(amount)
@@ -323,7 +168,7 @@ impl iced::Application for ImageViewApp {
     }
 
     fn view(&self) -> iced::Element<'_, Self::Message, Self::Theme, iced::Renderer> {
-        use iced::widget::{row, vertical_rule};
+        use iced::widget::vertical_rule;
 
         let preview = preview(self);
         let controls = controls(self);
@@ -352,9 +197,7 @@ impl iced::Application for ImageViewApp {
 }
 
 fn get_file() -> Option<FileInfo> {
-    let Some(path) = rfd::FileDialog::new().pick_file() else {
-        return None;
-    };
+    let path = rfd::FileDialog::new().pick_file()?;
 
     let Ok(data) = fs::read(&path) else {
         return None;
@@ -370,7 +213,7 @@ fn preview(app: &ImageViewApp) -> iced::Element<AppMessage> {
     use iced::Length;
     use iced::Padding;
 
-    use iced::widget::{container, row, scrollable, vertical_slider};
+    use iced::widget::{container, scrollable, vertical_slider};
 
     let file_len_bits = app.preview.file_data().len() * 8;
     let ratio = file_len_bits as f64 / u32::MAX as f64;

@@ -3,7 +3,6 @@ use crate::shader::DecodingScheme;
 use super::shader::FragmentShaderProgram;
 use std::sync::Arc;
 
-// #[derive(Clone)]
 pub struct Preview {
     start_bit: u64,
     frame_height: u32,
@@ -76,8 +75,7 @@ impl Preview {
 
     pub fn total_lines(&self) -> u64 {
         let bits = (self.file_data.len() * 8) as u64;
-        let lines = bits.checked_div(self.bits_per_line()).unwrap_or(0);
-        lines
+        bits.checked_div(self.bits_per_line()).unwrap_or(0)
     }
 
     pub fn current_line(&self) -> u64 {
