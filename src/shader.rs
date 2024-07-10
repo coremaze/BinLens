@@ -103,18 +103,6 @@ struct FragmentShaderPipeline {
 
 impl FragmentShaderPipeline {
     fn new(device: &wgpu::Device, format: wgpu::TextureFormat) -> Self {
-        // let shader = unsafe {
-        //     device.create_shader_module_spirv(
-        //         //     wgpu::ShaderModuleDescriptor {
-        //         //     label: Some("FragmentShaderPipeline shader"),
-        //         //     source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(include_str!(
-        //         //         "shader.wgsl"
-        //         //     ))),
-        //         // }
-        //         &include_spirv_raw!("shader.spv"),
-        //     )
-        // };
-
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("FragmentShaderPipeline shader"),
             source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(include_str!(
@@ -152,14 +140,9 @@ impl FragmentShaderPipeline {
             mapped_at_creation: false,
         });
 
-        // let pixel_data = vec![0x000000ffu32; 2000 * 2000];
-        let mut pixel_data = Vec::<u32>::new();
-        for i in 0..=10_000_000 {
-            pixel_data.push(i);
-        }
         let pixel_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Storage Buffer"),
-            contents: bytemuck::cast_slice(&pixel_data),
+            contents: &[0u8; 4],
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
         });
 
