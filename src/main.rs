@@ -1,4 +1,8 @@
-use std::{fs, path::PathBuf, sync::Arc};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use iced::{
     mouse::ScrollDelta,
@@ -11,6 +15,9 @@ use preview::Preview;
 mod pixel_mode;
 use pixel_mode::PixelMode;
 
+mod file_picker;
+use file_picker::FilePicker;
+
 mod shader;
 
 struct FileInfo {
@@ -20,6 +27,7 @@ struct FileInfo {
 struct ImageViewApp {
     pixel_mode: PixelMode,
     file: Option<FileInfo>,
+    picking_file: bool,
     preview: Preview,
 }
 #[derive(Debug, Clone)]
@@ -33,48 +41,34 @@ enum AppMessage {
     BitOffset(u32),
     WindowResize { width: u32, height: u32 },
     ToggleGrid(bool),
+    FilePickResult(Option<PathBuf>),
 }
 
 impl ImageViewApp {
     pub fn update_pixel_decoding(&mut self) {
         match &self.file {
             Some(file) => {
-                // let pixels = match self.pixel_mode {
-                //     PixelMode::RGB => file
-                //         .data
-                //         .chunks_exact(3)
-                //         .map(|data| Pixel {
-                //             red: data[0],
-                //             green: data[1],
-                //             blue: data[2],
-                //         })
-                //         .collect::<Vec<Pixel>>(),
-                //     PixelMode::BGR => file
-                //         .data
-                //         .chunks_exact(3)
-                //         .map(|data| Pixel {
-                //             blue: data[0],
-                //             green: data[1],
-                //             red: data[2],
-                //         })
-                //         .collect::<Vec<Pixel>>(),
-                //     PixelMode::BPP8 => file
-                //         .data
-                //         .iter()
-                //         .map(|&data| Pixel {
-                //             red: data,
-                //             green: data,
-                //             blue: data,
-                //         })
-                //         .collect::<Vec<Pixel>>(),
-                // };
-
                 self.preview.set_file_data(file.data.clone());
             }
             None => {
                 self.preview.clear();
             }
         }
+    }
+
+    pub fn open_file(&mut self, path: &Path) {
+        match fs::read(path) {
+            Ok(data) => {
+                self.file = Some(FileInfo {
+                    data: Arc::new(data),
+                    path: path.to_owned(),
+                });
+                self.update_pixel_decoding();
+            }
+            Err(why) => {
+                eprintln!("Could not open file {path:#?} : {why}");
+            }
+        };
     }
 }
 
@@ -90,6 +84,7 @@ impl iced::Application for ImageViewApp {
                 pixel_mode: PixelMode::Rgb,
                 file: None,
                 preview: Preview::default(),
+                picking_file: false,
             },
             iced::Command::none(),
         )
@@ -116,11 +111,7 @@ impl iced::Application for ImageViewApp {
                 self.preview.set_target_width(image_width);
             }
             AppMessage::OpenFileDialog => {
-                let file_info = get_file();
-                if file_info.is_some() {
-                    self.file = file_info;
-                }
-                self.update_pixel_decoding();
+                self.picking_file = true;
             }
             AppMessage::ImageScroll(scroll) => {
                 let scroll = u32::MAX - scroll;
@@ -162,6 +153,12 @@ impl iced::Application for ImageViewApp {
             AppMessage::ToggleGrid(grid) => {
                 self.preview.set_grid(grid);
             }
+            AppMessage::FilePickResult(path) => {
+                self.picking_file = false;
+                if let Some(path) = path {
+                    self.open_file(&path);
+                }
+            }
         }
 
         iced::Command::none()
@@ -176,7 +173,9 @@ impl iced::Application for ImageViewApp {
     }
 
     fn subscription(&self) -> Subscription<AppMessage> {
-        iced::event::listen_with(|event, _| match event {
+        let mut subcriptions = Vec::<Subscription<AppMessage>>::new();
+
+        let event_listener = iced::event::listen_with(|event, _| match event {
             Event::Window(_, window_event) => {
                 let new_size: Option<(u32, u32)> = match window_event {
                     window::Event::Opened { position: _, size } => {
@@ -192,21 +191,17 @@ impl iced::Application for ImageViewApp {
                 Some(AppMessage::ScrollWheel(delta))
             }
             _ => None,
-        })
+        });
+        subcriptions.push(event_listener);
+
+        if self.picking_file {
+            let file_picker_subscription =
+                Subscription::from_recipe(FilePicker::default()).map(AppMessage::FilePickResult);
+            subcriptions.push(file_picker_subscription);
+        }
+
+        Subscription::batch(subcriptions)
     }
-}
-
-fn get_file() -> Option<FileInfo> {
-    let path = rfd::FileDialog::new().pick_file()?;
-
-    let Ok(data) = fs::read(&path) else {
-        return None;
-    };
-
-    Some(FileInfo {
-        data: Arc::new(data),
-        path,
-    })
 }
 
 fn preview(app: &ImageViewApp) -> iced::Element<AppMessage> {
@@ -236,19 +231,10 @@ fn preview(app: &ImageViewApp) -> iced::Element<AppMessage> {
             .width(0),
     };
 
-    // canvas()
-
     row!(
-        // scrollable(container(iced::widget::Image::new(
-        //     app.preview.image_handle()
-        // )))
-        // container(row!(app.preview.clone()))
-        //     // .direction(dir)
-        container(
-            iced::widget::shader(&app.preview.program)
-                .width(Length::Fill)
-                .height(Length::Fill)
-        ),
+        iced::widget::shader(&app.preview.program)
+            .width(Length::Fill)
+            .height(Length::Fill),
         container(scrollbar).padding(Padding {
             top: 0.,
             right: 0.,
@@ -304,10 +290,6 @@ fn controls(app: &ImageViewApp) -> iced::Element<AppMessage> {
             ),
             checkbox("Grid", app.preview.grid())
                 .on_toggle(|checked| { AppMessage::ToggleGrid(checked) }),
-            // horizontal_rule(1),
-            // text("Controls"),
-            // text("Controls!"),
-            // text("Controls!!"),
         )
         .width(400)
         .height(Length::Fill)
