@@ -30,7 +30,7 @@ struct Uniforms {
 	decoding_blue7bit: i32,
 	decoding_bits_per_pixel: u32,
 	grid: u32,
-	pad: u32,
+	x_pixel_scroll: u32,
 }
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
@@ -77,7 +77,7 @@ fn fs_main(in: VertexOut) -> @location(0) vec4f {
 
 	// Get the x and y position of the binary image to display
 	// This is different from real_pos_x and y because of the ability to scale
-	let data_x = u32(real_pos_x) / uniforms.scale;
+	let data_x = (u32(real_pos_x) / uniforms.scale) + uniforms.x_pixel_scroll;
 	let data_y = u32(real_pos_y) / uniforms.scale;
 
 	// Do not draw anything past the target_width

@@ -24,6 +24,14 @@ impl Default for Preview {
 }
 
 impl Preview {
+    pub fn set_x_scroll(&mut self, x: u32) {
+        self.program.set_x_scroll(x)
+    }
+
+    pub fn x_scroll(&self) -> u32 {
+        self.program.x_scroll()
+    }
+
     pub fn set_grid(&mut self, grid: bool) {
         self.program.set_grid(grid);
     }

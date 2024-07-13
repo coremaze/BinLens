@@ -44,7 +44,7 @@ pub struct Uniforms {
     decoding_blue7bit: i32,
     decoding_bits_per_pixel: u32,
     grid: u32,
-    pad: u32,
+    x_pixel_scroll: u32,
 }
 
 #[derive(Clone, Debug)]
@@ -245,6 +245,7 @@ pub struct FragmentShaderPrimitive {
     decoding_scheme: DecodingScheme,
     bit_offset: u32,
     grid: bool,
+    x_pixel_scroll: u32,
 }
 
 impl FragmentShaderPrimitive {
@@ -255,6 +256,7 @@ impl FragmentShaderPrimitive {
         bit_offset: u32,
         decoding_scheme: DecodingScheme,
         grid: bool,
+        x_pixel_scroll: u32,
     ) -> Self {
         Self {
             target_width,
@@ -263,6 +265,7 @@ impl FragmentShaderPrimitive {
             bit_offset,
             decoding_scheme,
             grid,
+            x_pixel_scroll,
         }
     }
 }
@@ -323,7 +326,7 @@ impl shader::Primitive for FragmentShaderPrimitive {
                 decoding_blue7bit: d(self.decoding_scheme.blue[7]),
                 decoding_bits_per_pixel: self.decoding_scheme.bits_per_pixel,
                 grid: if self.grid { 1 } else { 0 },
-                pad: 0,
+                x_pixel_scroll: self.x_pixel_scroll,
             },
             self.buffer.as_slice(),
         );
@@ -349,6 +352,7 @@ pub struct FragmentShaderProgram {
     bit_offset: u32,
     decoding_scheme: DecodingScheme,
     grid: bool,
+    x_pixel_scroll: u32,
 }
 
 impl FragmentShaderProgram {
@@ -360,7 +364,16 @@ impl FragmentShaderProgram {
             bit_offset: 0,
             decoding_scheme: Default::default(),
             grid: false,
+            x_pixel_scroll: 0,
         }
+    }
+
+    pub fn set_x_scroll(&mut self, x: u32) {
+        self.x_pixel_scroll = x;
+    }
+
+    pub fn x_scroll(&self) -> u32 {
+        self.x_pixel_scroll
     }
 
     pub fn set_grid(&mut self, grid: bool) {
@@ -424,6 +437,7 @@ impl shader::Program<super::AppMessage> for FragmentShaderProgram {
             self.bit_offset,
             self.decoding_scheme.clone(),
             self.grid,
+            self.x_pixel_scroll,
         )
     }
 }

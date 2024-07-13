@@ -6,8 +6,8 @@ use std::{
 
 use iced::{
     mouse::ScrollDelta,
-    widget::{checkbox, row},
-    window, Application, Event, Subscription,
+    widget::{checkbox, row, slider},
+    window, Application, Event, Padding, Subscription,
 };
 mod preview;
 use preview::Preview;
@@ -35,7 +35,8 @@ enum AppMessage {
     PixelModeSelected(PixelMode),
     ImageWidthSelected(u32),
     OpenFileDialog,
-    ImageScroll(u32),
+    ImageScrollVertical(u32),
+    ImageScrollHorizontal(u32),
     ImageScale(u32),
     ScrollWheel(ScrollDelta),
     BitOffset(u32),
@@ -113,7 +114,7 @@ impl iced::Application for ImageViewApp {
             AppMessage::OpenFileDialog => {
                 self.picking_file = true;
             }
-            AppMessage::ImageScroll(scroll) => {
+            AppMessage::ImageScrollVertical(scroll) => {
                 let scroll = u32::MAX - scroll;
                 let ratio = f64::from(u32::MAX) / self.preview.total_lines() as f64;
                 let new_line: u64 = (f64::from(scroll) / ratio).round() as u64;
@@ -158,6 +159,9 @@ impl iced::Application for ImageViewApp {
                 if let Some(path) = path {
                     self.open_file(&path);
                 }
+            }
+            AppMessage::ImageScrollHorizontal(scroll) => {
+                self.preview.set_x_scroll(scroll);
             }
         }
 
@@ -208,7 +212,7 @@ fn preview(app: &ImageViewApp) -> iced::Element<AppMessage> {
     use iced::Length;
     use iced::Padding;
 
-    use iced::widget::{container, scrollable, vertical_slider};
+    use iced::widget::{column, container, scrollable, vertical_slider};
 
     let file_len_bits = app.preview.file_data().len() * 8;
     let ratio = file_len_bits as f64 / u32::MAX as f64;
@@ -217,7 +221,13 @@ fn preview(app: &ImageViewApp) -> iced::Element<AppMessage> {
     let scrollbar = vertical_slider(
         0u32..=u32::MAX,
         u32::MAX - scroll_offset,
-        AppMessage::ImageScroll,
+        AppMessage::ImageScrollVertical,
+    );
+
+    let width_scrollbar = slider(
+        0..=app.preview.target_width(),
+        app.preview.x_scroll(),
+        AppMessage::ImageScrollHorizontal,
     );
 
     let _dir = scrollable::Direction::Both {
@@ -231,18 +241,29 @@ fn preview(app: &ImageViewApp) -> iced::Element<AppMessage> {
             .width(0),
     };
 
-    row!(
-        iced::widget::shader(&app.preview.program)
-            .width(Length::Fill)
-            .height(Length::Fill),
-        container(scrollbar).padding(Padding {
+    column!(
+        row!(
+            container(
+                iced::widget::shader(&app.preview.program)
+                    .width(Length::Fill)
+                    .height(Length::Fill)
+            )
+            .padding(Padding {
+                top: 0.,
+                right: 5.,
+                bottom: 5.,
+                left: 0.,
+            }),
+            container(scrollbar)
+        ),
+        container(width_scrollbar).padding(Padding {
             top: 0.,
-            right: 0.,
+            right: 30.,
             bottom: 0.,
-            left: 10.,
+            left: 0.,
         })
     )
-    .padding(10)
+    .padding(5)
     .width(Length::Fill)
     .height(Length::Fill)
     .into()
@@ -287,7 +308,13 @@ fn controls(app: &ImageViewApp) -> iced::Element<AppMessage> {
                     app.preview.start_bit() as u32,
                     AppMessage::BitOffset
                 )
-            ),
+            )
+            .padding(Padding {
+                top: 0.,
+                right: 0.,
+                bottom: 10.,
+                left: 0.,
+            }),
             checkbox("Grid", app.preview.grid())
                 .on_toggle(|checked| { AppMessage::ToggleGrid(checked) }),
         )
