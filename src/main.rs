@@ -29,6 +29,9 @@ struct ImageViewApp {
     file: Option<FileInfo>,
     picking_file: bool,
     preview: Preview,
+    image_width_str: String,
+    scale_str: String,
+    bit_offset_str: String,
 }
 #[derive(Debug, Clone)]
 enum AppMessage {
@@ -43,6 +46,15 @@ enum AppMessage {
     WindowResize { width: u32, height: u32 },
     ToggleGrid(bool),
     FilePickResult(Option<PathBuf>),
+    ImageWidthStrChanged(String),
+    ScaleStrChanged(String),
+    BitOffsetStrChanged(String),
+    IncrementImageWidth,
+    DecrementImageWidth,
+    IncrementScale,
+    DecrementScale,
+    IncrementBitOffset,
+    DecrementBitOffset,
 }
 
 impl ImageViewApp {
@@ -80,12 +92,19 @@ impl iced::Application for ImageViewApp {
     type Flags = ();
 
     fn new(_flags: Self::Flags) -> (Self, iced::Command<Self::Message>) {
+        let preview = Preview::default();
+        let image_width_str = preview.target_width().to_string();
+        let scale_str = preview.scale().to_string();
+        let bit_offset_str = preview.start_bit().to_string();
         (
             Self {
                 pixel_mode: PixelMode::Rgb,
                 file: None,
-                preview: Preview::default(),
+                preview,
                 picking_file: false,
+                image_width_str,
+                scale_str,
+                bit_offset_str,
             },
             iced::Command::none(),
         )
@@ -110,6 +129,7 @@ impl iced::Application for ImageViewApp {
             }
             AppMessage::ImageWidthSelected(image_width) => {
                 self.preview.set_target_width(image_width);
+                self.image_width_str = image_width.to_string();
             }
             AppMessage::OpenFileDialog => {
                 self.picking_file = true;
@@ -126,9 +146,11 @@ impl iced::Application for ImageViewApp {
             }
             AppMessage::ImageScale(scale) => {
                 self.preview.set_scale(scale);
+                self.scale_str = scale.to_string();
             }
             AppMessage::BitOffset(offset) => {
                 self.preview.set_start_bit(offset as u64);
+                self.bit_offset_str = offset.to_string();
             }
             AppMessage::ScrollWheel(delta) => {
                 let lines_scrolled = match delta {
@@ -162,6 +184,54 @@ impl iced::Application for ImageViewApp {
             }
             AppMessage::ImageScrollHorizontal(scroll) => {
                 self.preview.set_x_scroll(scroll);
+            }
+            AppMessage::ImageWidthStrChanged(s) => {
+                self.image_width_str = s;
+                if let Ok(val) = self.image_width_str.parse() {
+                    self.preview.set_target_width(val);
+                }
+            }
+            AppMessage::ScaleStrChanged(s) => {
+                self.scale_str = s;
+                if let Ok(val) = self.scale_str.parse() {
+                    self.preview.set_scale(val);
+                }
+            }
+            AppMessage::BitOffsetStrChanged(s) => {
+                self.bit_offset_str = s;
+                if let Ok(val) = self.bit_offset_str.parse() {
+                    self.preview.set_start_bit(val);
+                }
+            }
+            AppMessage::IncrementImageWidth => {
+                let val = self.preview.target_width().saturating_add(1);
+                self.preview.set_target_width(val);
+                self.image_width_str = val.to_string();
+            }
+            AppMessage::DecrementImageWidth => {
+                let val = self.preview.target_width().saturating_sub(1).max(1);
+                self.preview.set_target_width(val);
+                self.image_width_str = val.to_string();
+            }
+            AppMessage::IncrementScale => {
+                let val = self.preview.scale().saturating_add(1);
+                self.preview.set_scale(val);
+                self.scale_str = val.to_string();
+            }
+            AppMessage::DecrementScale => {
+                let val = self.preview.scale().saturating_sub(1).max(1);
+                self.preview.set_scale(val);
+                self.scale_str = val.to_string();
+            }
+            AppMessage::IncrementBitOffset => {
+                let val = self.preview.start_bit().saturating_add(1);
+                self.preview.set_start_bit(val);
+                self.bit_offset_str = val.to_string();
+            }
+            AppMessage::DecrementBitOffset => {
+                let val = self.preview.start_bit().saturating_sub(1);
+                self.preview.set_start_bit(val);
+                self.bit_offset_str = val.to_string();
             }
         }
 
@@ -272,7 +342,9 @@ fn preview(app: &ImageViewApp) -> iced::Element<AppMessage> {
 fn controls(app: &ImageViewApp) -> iced::Element<AppMessage> {
     use iced::Length;
 
-    use iced::widget::{column, container, horizontal_rule, pick_list, slider, text};
+    use iced::widget::{
+        button, column, container, horizontal_rule, pick_list, row, slider, text, text_input,
+    };
 
     let controls = container(
         column!(
@@ -286,26 +358,53 @@ fn controls(app: &ImageViewApp) -> iced::Element<AppMessage> {
             horizontal_rule(1),
             column!(
                 text(format!("Image width: {}", app.preview.target_width())),
+                row!(
+                    button("-").on_press(AppMessage::DecrementImageWidth),
+                    text_input("Image width", &app.image_width_str)
+                        .on_input(AppMessage::ImageWidthStrChanged),
+                    button("+").on_press(AppMessage::IncrementImageWidth)
+                )
+                .spacing(5),
                 slider(
-                    1..=400,
+                    1..=2048,
                     app.preview.target_width(),
                     AppMessage::ImageWidthSelected
                 )
             ),
             column!(
                 text(format!("Scale: {}x", app.preview.scale())),
-                slider(1..=10, app.preview.scale(), AppMessage::ImageScale)
+                row!(
+                    button("-").on_press(AppMessage::DecrementScale),
+                    text_input("Scale", &app.scale_str)
+                        .on_input(AppMessage::ScaleStrChanged)
+                        .width(Length::Fixed(100.0)),
+                    button("+").on_press(AppMessage::IncrementScale),
+                    slider(1..=10, app.preview.scale(), AppMessage::ImageScale).width(Length::Fill)
+                )
+                .spacing(5),
             ),
             column!(
                 text(format!(
-                    "Start bit: {} ({} bytes, {} bits)",
+                    "Start bit: {} ({:#X})",
                     app.preview.start_bit(),
+                    app.preview.start_bit()
+                )),
+                text(format!(
+                    "Byte offset: {} ({:#X}) + {} bits",
+                    app.preview.start_bit() / 8,
                     app.preview.start_bit() / 8,
                     app.preview.start_bit() % 8
                 )),
+                row!(
+                    button("-").on_press(AppMessage::DecrementBitOffset),
+                    text_input("Start bit", &app.bit_offset_str)
+                        .on_input(AppMessage::BitOffsetStrChanged),
+                    button("+").on_press(AppMessage::IncrementBitOffset)
+                )
+                .spacing(5),
                 slider(
                     0..=(24 * 8),
-                    app.preview.start_bit() as u32,
+                    app.preview.start_bit().min(24 * 8) as u32,
                     AppMessage::BitOffset
                 )
             )
